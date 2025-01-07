@@ -14,6 +14,47 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 )
 
+export async function GET() {
+  try {
+    // Buscar todos os usuários do Auth
+    const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers()
+    
+    if (getUserError) {
+      return NextResponse.json({ error: getUserError.message }, { status: 500 })
+    }
+
+    if (!users) {
+      return NextResponse.json({ users: [] })
+    }
+
+    // Buscar todos os perfis
+    const { data: profiles, error: profileError } = await supabase
+      .from('profiles')
+      .select('*')
+
+    if (profileError) {
+      return NextResponse.json({ error: profileError.message }, { status: 500 })
+    }
+
+    // Combinar usuários com seus perfis
+    const usersWithProfiles = users.map(user => ({
+      id: user.id,
+      email: user.email,
+      created_at: user.created_at,
+      profile: profiles?.find(profile => profile.id === user.id)
+    }))
+
+    return NextResponse.json({ users: usersWithProfiles })
+  } catch (error: unknown) {
+    console.error('Erro na API:', error)
+    const apiError = error as ApiError
+    return NextResponse.json(
+      { error: apiError.message || 'Erro interno do servidor' }, 
+      { status: 500 }
+    )
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json()

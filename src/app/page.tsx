@@ -15,10 +15,82 @@ interface ApiError {
   details?: string;
 }
 
+function ProtectionScreen({ onAccess }: { onAccess: () => void }) {
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState('')
+
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    if (password === 'milionario27@') {
+      onAccess()
+    } else {
+      setError('Código inválido')
+      setPassword('')
+    }
+  }
+
+  return (
+    <div className="grid grid-rows-[20px_1fr_20px] min-h-screen bg-black text-white">
+      <div className="row-start-2 flex items-center justify-center">
+        <div className="w-full max-w-md mx-4">
+          <div className="bg-zinc-900/50 backdrop-blur-sm p-8 rounded-lg shadow-2xl border border-zinc-800/50">
+            <h1 className="text-3xl font-bold mb-8 text-center text-white">
+              Área Restrita
+            </h1>
+            
+            <div className="mb-6 text-sm text-zinc-400 text-center">
+              Digite o código de acesso para continuar
+            </div>
+            
+            <form onSubmit={handleSubmit} className="space-y-6">
+              <div>
+                <label htmlFor="password" className="block text-sm font-medium text-zinc-300 mb-2">
+                  Código de Acesso
+                </label>
+                <input
+                  type="password"
+                  id="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 bg-zinc-800/50 border border-zinc-700/50 rounded-md 
+                           text-white placeholder-zinc-500 focus:outline-none focus:ring-2 
+                           focus:ring-white/25 focus:border-transparent transition-all duration-200"
+                  placeholder="Digite o código de acesso"
+                  autoComplete="off"
+                />
+              </div>
+
+              {error && (
+                <div className="text-red-400 text-sm text-center">
+                  {error}
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="w-full py-3 px-4 bg-white/10 backdrop-blur-sm text-white font-medium 
+                         rounded-md border border-white/10 hover:bg-white/20 focus:outline-none 
+                         focus:ring-2 focus:ring-white/25 transition-all duration-200"
+              >
+                Acessar
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function Home() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<StatusMessage | null>(null)
   const [useRandomPhone, setUseRandomPhone] = useState(true)
+
+  if (!isAuthenticated) {
+    return <ProtectionScreen onAccess={() => setIsAuthenticated(true)} />
+  }
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
