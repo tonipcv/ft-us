@@ -14,21 +14,26 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_KEY!
 )
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    // Buscar todos os usuários do Auth
-    const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers()
+    const { searchParams } = new URL(request.url)
+    const page = parseInt(searchParams.get('page') || '1')
+    const per_page = parseInt(searchParams.get('per_page') || '25')
+    const status = searchParams.get('status') // 'premium', 'normal', or null for all
+
+    // Primeiro buscar todos os usuários
+    const { data: { users: allUsers }, error: getUserError } = await supabase.auth.admin.listUsers()
     
     if (getUserError) {
       return NextResponse.json({ error: getUserError.message }, { status: 500 })
     }
 
-    if (!users) {
-      return NextResponse.json({ users: [] })
+    if (!allUsers) {
+      return NextResponse.json({ users: [], total: 0 })
     }
 
     // Buscar todos os perfis
-    const { data: profiles, error: profileError } = await supabase
+    const { data: allProfiles, error: profileError } = await supabase
       .from('profiles')
       .select('*')
 
@@ -36,15 +41,38 @@ export async function GET() {
       return NextResponse.json({ error: profileError.message }, { status: 500 })
     }
 
-    // Combinar usuários com seus perfis
-    const usersWithProfiles = users.map(user => ({
+    // Filtrar usuários com base no status
+    let filteredUsers = allUsers
+    if (status) {
+      filteredUsers = allUsers.filter(user => {
+        const userProfile = allProfiles?.find(profile => profile.id === user.id)
+        if (status === 'premium') {
+          return userProfile?.is_premium === true
+        } else if (status === 'normal') {
+          return userProfile?.is_premium === false || !userProfile
+        }
+        return true
+      })
+    }
+
+    // Aplicar paginação após a filtragem
+    const total = filteredUsers.length
+    const start = (page - 1) * per_page
+    const end = start + per_page
+    const paginatedUsers = filteredUsers.slice(start, end)
+
+    // Combinar usuários paginados com seus perfis
+    const usersWithProfiles = paginatedUsers.map(user => ({
       id: user.id,
       email: user.email,
       created_at: user.created_at,
-      profile: profiles?.find(profile => profile.id === user.id)
+      profile: allProfiles?.find(profile => profile.id === user.id)
     }))
 
-    return NextResponse.json({ users: usersWithProfiles })
+    return NextResponse.json({ 
+      users: usersWithProfiles,
+      total: total
+    })
   } catch (error: unknown) {
     console.error('Erro na API:', error)
     const apiError = error as ApiError

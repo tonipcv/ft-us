@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
+import Link from 'next/link'
 
 interface StatusMessage {
   text: string
@@ -188,6 +189,15 @@ export default function Home() {
       <div className="row-start-2 flex items-center justify-center">
         <div className="w-full max-w-md mx-4">
           <div className="bg-zinc-900/50 backdrop-blur-sm p-8 rounded-lg shadow-2xl border border-zinc-800/50">
+            <div className="flex justify-end mb-4">
+              <Link 
+                href="/users" 
+                className="text-sm text-zinc-400 hover:text-white transition-colors duration-200"
+              >
+                Ver Usuários →
+              </Link>
+            </div>
+            
             <h1 className="text-3xl font-bold mb-8 text-center text-white">
               Adicionar Usuário Premium
             </h1>
