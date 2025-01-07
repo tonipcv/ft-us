@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { v4 as uuidv4 } from 'uuid'
 
+interface ApiError {
+  message: string;
+  code?: string;
+  details?: string;
+}
+
 // Criar cliente Supabase com variáveis de ambiente do servidor
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,7 +26,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: getUserError.message }, { status: 500 })
     }
 
-    const existingUser = users?.find(u => u.email.toLowerCase() === email.toLowerCase())
+    const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
     let userId: string
 
     if (existingUser) {
@@ -108,10 +114,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({ data: profileData })
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Erro na API:', error)
+    const apiError = error as ApiError
     return NextResponse.json(
-      { error: 'Erro interno do servidor' }, 
+      { error: apiError.message || 'Erro interno do servidor' }, 
       { status: 500 }
     )
   }

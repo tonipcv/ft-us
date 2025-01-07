@@ -9,6 +9,12 @@ interface StatusMessage {
   type: 'success' | 'error' | 'warning'
 }
 
+interface ApiError {
+  message: string;
+  code?: string;
+  details?: string;
+}
+
 export default function Home() {
   const [loading, setLoading] = useState(false)
   const [status, setStatus] = useState<StatusMessage | null>(null)
@@ -93,10 +99,11 @@ export default function Home() {
         details: `Acesso premium ativo até ${expirationDate.toLocaleDateString('pt-BR')}`,
         type: 'success'
       })
-    } catch (error: any) {
+    } catch (error: unknown) {
+      const apiError = error as ApiError
       setStatus({
         text: 'Erro na operação',
-        details: error.message,
+        details: apiError.message || 'Erro desconhecido',
         type: 'error'
       })
     } finally {
