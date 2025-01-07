@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 
 interface User {
   id: string
@@ -133,12 +134,12 @@ export default function UsersPage() {
       <div className="max-w-7xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Gerenciar Usuários</h1>
-          <a
+          <Link
             href="/"
             className="px-4 py-2 bg-white/10 rounded-md hover:bg-white/20 transition-all duration-200"
           >
             Adicionar Novo
-          </a>
+          </Link>
         </div>
 
         {status && (
