@@ -102,6 +102,7 @@ export default function UsersPage() {
   const [loading, setLoading] = useState(true)
   const [status, setStatus] = useState<StatusMessage | null>(null)
   const [statusFilter, setStatusFilter] = useState<'all' | 'premium' | 'normal'>('all')
+  const [searchTerm, setSearchTerm] = useState('')
   const [editingUser, setEditingUser] = useState<User | null>(null)
   const [editLoading, setEditLoading] = useState(false)
   const [pagination, setPagination] = useState<PaginationInfo>({
@@ -119,6 +120,10 @@ export default function UsersPage() {
 
       if (statusFilter !== 'all') {
         queryParams.append('status', statusFilter)
+      }
+
+      if (searchTerm.trim()) {
+        queryParams.append('search', searchTerm.trim())
       }
 
       const response = await fetch(`/api/users?${queryParams.toString()}`, {
@@ -144,7 +149,7 @@ export default function UsersPage() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.per_page, statusFilter])
+  }, [pagination.page, pagination.per_page, statusFilter, searchTerm])
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -255,11 +260,31 @@ export default function UsersPage() {
         <div className="flex justify-between items-center mb-8">
           <h1 className="text-3xl font-bold">Gerenciar Usuários</h1>
           <div className="flex items-center space-x-4">
+            <div className="relative">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setPagination(prev => ({ ...prev, page: 1 })) // Reset to first page on search
+                }}
+                placeholder="Buscar usuários..."
+                className="w-64 px-4 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-md 
+                         text-white placeholder-zinc-500 focus:outline-none focus:ring-2 
+                         focus:ring-white/25 focus:border-transparent transition-all duration-200
+                         pr-10"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none text-zinc-400">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                </svg>
+              </div>
+            </div>
             <select
               value={statusFilter}
               onChange={(e) => {
                 setStatusFilter(e.target.value as 'all' | 'premium' | 'normal')
-                setPagination(prev => ({ ...prev, page: 1 })) // Reset to first page on filter change
+                setPagination(prev => ({ ...prev, page: 1 }))
               }}
               className="px-3 py-2 bg-zinc-800/50 border border-zinc-700/50 rounded-md 
                        text-white placeholder-zinc-500 focus:outline-none focus:ring-2 

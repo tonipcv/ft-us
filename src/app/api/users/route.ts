@@ -20,20 +20,38 @@ export async function GET(request: Request) {
     const page = parseInt(searchParams.get('page') || '1')
     const per_page = parseInt(searchParams.get('per_page') || '25')
     const status = searchParams.get('status') // 'premium', 'normal', or null for all
+    const search = searchParams.get('search')?.toLowerCase() // Novo parâmetro de busca
 
-    // Primeiro buscar todos os usuários
-    const { data: { users: allUsers }, error: getUserError } = await supabase.auth.admin.listUsers()
-    
-    if (getUserError) {
-      return NextResponse.json({ error: getUserError.message }, { status: 500 })
+    // Buscar todos os usuários paginando até obter todos
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let allUsers: any[] = []
+    let currentPage = 0
+    let hasMore = true
+
+    while (hasMore) {
+      const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers({
+        page: currentPage,
+        perPage: 1000 // Máximo permitido pelo Supabase
+      })
+      
+      if (getUserError) {
+        return NextResponse.json({ error: getUserError.message }, { status: 500 })
+      }
+
+      if (!users || users.length === 0) {
+        hasMore = false
+      } else {
+        allUsers = [...allUsers, ...users]
+        currentPage++
+      }
     }
 
-    if (!allUsers) {
+    if (allUsers.length === 0) {
       return NextResponse.json({ users: [], total: 0 })
     }
 
     // Buscar todos os perfis
-    const { data: allProfiles, error: profileError } = await supabase
+    const { data: profiles, error: profileError } = await supabase
       .from('profiles')
       .select('*')
 
@@ -41,11 +59,25 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: profileError.message }, { status: 500 })
     }
 
-    // Filtrar usuários com base no status
+    // Aplicar busca se houver termo de pesquisa
     let filteredUsers = allUsers
-    if (status) {
+    if (search) {
       filteredUsers = allUsers.filter(user => {
-        const userProfile = allProfiles?.find(profile => profile.id === user.id)
+        const userProfile = profiles?.find(profile => profile.id === user.id)
+        const searchableFields = [
+          user.email?.toLowerCase(),
+          userProfile?.name?.toLowerCase(),
+          userProfile?.external_id?.toLowerCase(),
+          userProfile?.phone_number
+        ]
+        return searchableFields.some(field => field?.includes(search))
+      })
+    }
+
+    // Filtrar usuários com base no status
+    if (status) {
+      filteredUsers = filteredUsers.filter(user => {
+        const userProfile = profiles?.find(profile => profile.id === user.id)
         if (status === 'premium') {
           return userProfile?.is_premium === true
         } else if (status === 'normal') {
@@ -55,8 +87,8 @@ export async function GET(request: Request) {
       })
     }
 
-    // Aplicar paginação após a filtragem
-    const total = filteredUsers.length
+    // Aplicar paginação manualmente
+    const totalUsers = filteredUsers.length
     const start = (page - 1) * per_page
     const end = start + per_page
     const paginatedUsers = filteredUsers.slice(start, end)
@@ -66,12 +98,12 @@ export async function GET(request: Request) {
       id: user.id,
       email: user.email,
       created_at: user.created_at,
-      profile: allProfiles?.find(profile => profile.id === user.id)
+      profile: profiles?.find(profile => profile.id === user.id)
     }))
 
     return NextResponse.json({ 
       users: usersWithProfiles,
-      total: total
+      total: totalUsers
     })
   } catch (error: unknown) {
     console.error('Erro na API:', error)
