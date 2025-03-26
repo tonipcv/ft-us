@@ -93,13 +93,34 @@ export async function GET(request: Request) {
     const end = start + per_page
     const paginatedUsers = filteredUsers.slice(start, end)
 
+    // Obter IDs dos usuários paginados
+    const userIds = paginatedUsers.map(user => user.id)
+    
+    // Buscar perfis específicos para os usuários paginados
+    // Isso garante que encontraremos os perfis mesmo que estejam além dos primeiros 1000
+    const { data: specificProfiles, error: specificProfileError } = await supabase
+      .from('profiles')
+      .select('*')
+      .in('id', userIds)
+    
+    if (specificProfileError) {
+      console.error('Erro ao buscar perfis específicos:', specificProfileError)
+    }
+    
     // Combinar usuários paginados com seus perfis
-    const usersWithProfiles = paginatedUsers.map(user => ({
-      id: user.id,
-      email: user.email,
-      created_at: user.created_at,
-      profile: profiles?.find(profile => profile.id === user.id)
-    }))
+    // Primeiro tentamos encontrar no conjunto específico de perfis
+    // Se não encontrarmos, tentamos no conjunto geral de perfis
+    const usersWithProfiles = paginatedUsers.map(user => {
+      const specificProfile = specificProfiles?.find(profile => profile.id === user.id)
+      const generalProfile = profiles?.find(profile => profile.id === user.id)
+      
+      return {
+        id: user.id,
+        email: user.email,
+        created_at: user.created_at,
+        profile: specificProfile || generalProfile
+      }
+    })
 
     return NextResponse.json({ 
       users: usersWithProfiles,
