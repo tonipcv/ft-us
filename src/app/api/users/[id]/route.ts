@@ -7,68 +7,51 @@ const supabase = createClient(
 )
 
 // PUT: Atualiza ou cria o perfil do usuário
-export async function PUT(request: NextRequest) {
+export async function PUT(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
   try {
-    // Extrair o "id" a partir da URL
-    const { pathname } = new URL(request.url)
-    // Supondo que sua rota é "/api/users/[id]", o ID será o último segmento
-    const segments = pathname.split('/')
-    const userId = segments[segments.length - 1]
-    
-    const data = await request.json()
-    const profileData = {
-      id: userId,
-      name: data.name,
-      is_premium: data.is_premium,
-      expiration_date: data.expiration_date,
-      phone_number: data.phone_number,
-      phone_local_code: data.phone_local_code,
-      external_id: data.external_id,
-      updated_at: new Date().toISOString(),
-    }
+    const { id } = params
+    const body = await request.json()
 
     // Verificar se o perfil existe
-    const { data: existingProfile, error: checkError } = await supabase
+    const { data: existingProfile, error: profileError } = await supabase
       .from('profiles')
-      .select('id')
-      .eq('id', userId)
+      .select('*')
+      .eq('id', id)
       .single()
 
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Erro ao verificar perfil:', checkError)
-      return NextResponse.json({ error: checkError.message }, { status: 500 })
+    if (profileError && profileError.code !== 'PGRST116') {
+      console.error('Erro ao buscar perfil:', profileError)
+      return NextResponse.json({ error: 'Erro ao buscar perfil' }, { status: 500 })
     }
 
-    // Criar ou atualizar
-    let result
-    if (!existingProfile) {
-      // Criar novo perfil
-      result = await supabase
-        .from('profiles')
-        .insert([{ ...profileData, created_at: new Date().toISOString() }])
-    } else {
-      // Atualizar perfil existente
-      result = await supabase
-        .from('profiles')
-        .update(profileData)
-        .eq('id', userId)
+    // Atualizar ou criar o perfil
+    const { data: profile, error: upsertError } = await supabase
+      .from('profiles')
+      .upsert({
+        id,
+        name: body.name,
+        is_premium: body.is_premium,
+        expiration_date: body.expiration_date,
+        phone_number: body.phone_number,
+        phone_local_code: body.phone_local_code,
+        external_id: body.external_id,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (upsertError) {
+      console.error('Erro ao atualizar perfil:', upsertError)
+      return NextResponse.json({ error: 'Erro ao atualizar perfil' }, { status: 500 })
     }
 
-    if (result.error) {
-      console.error('Erro ao salvar perfil:', result.error)
-      return NextResponse.json(
-        { error: result.error.message, details: result.error.details },
-        { status: 500 }
-      )
-    }
-
-    return NextResponse.json({ success: true, profile: result.data })
-  } catch (error: unknown) {
-    console.error('Erro ao atualizar usuário:', error)
-    return NextResponse.json(
-      { error: 'Erro interno do servidor' },
-      { status: 500 }
-    )
+    return NextResponse.json(profile)
+  } catch (error) {
+    console.error('Erro ao processar requisição:', error)
+    return NextResponse.json({ error: 'Erro ao processar requisição' }, { status: 500 })
   }
 }
 

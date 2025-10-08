@@ -115,7 +115,7 @@ export default function UsersPage() {
     try {
       const queryParams = new URLSearchParams({
         page: pagination.page.toString(),
-        per_page: pagination.per_page.toString()
+        limit: pagination.per_page.toString()
       })
 
       if (statusFilter !== 'all') {
@@ -300,6 +300,24 @@ export default function UsersPage() {
             >
               Adicionar Novo
             </Link>
+            <Link
+              href="/bulk-premium"
+              className="px-4 py-2 bg-emerald-500/10 text-emerald-200 rounded-md hover:bg-emerald-500/20 transition-all duration-200"
+            >
+              Converter em Massa
+            </Link>
+            <a
+              href="/api/users/export?type=premium"
+              className="px-4 py-2 bg-emerald-600/10 text-emerald-200 rounded-md hover:bg-emerald-600/20 transition-all duration-200"
+            >
+              Exportar Premium CSV
+            </a>
+            <a
+              href="/api/users/export?type=all"
+              className="px-4 py-2 bg-white/10 text-white rounded-md hover:bg-white/20 transition-all duration-200"
+            >
+              Exportar Geral CSV
+            </a>
           </div>
         </div>
 

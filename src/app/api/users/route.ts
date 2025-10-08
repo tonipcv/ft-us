@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { v4 as uuidv4 } from 'uuid'
+import { createServerClient } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 interface ApiError {
   message: string;
@@ -8,240 +10,268 @@ interface ApiError {
   details?: string;
 }
 
-// Criar cliente Supabase com variáveis de ambiente do servidor
+if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error('SUPABASE_SERVICE_ROLE_KEY is required')
+}
+
+if (!process.env.NEXT_PUBLIC_SUPABASE_URL) {
+  throw new Error('NEXT_PUBLIC_SUPABASE_URL is required')
+}
+
+// Criar cliente Supabase com a service role key (não usar a anon key)
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_URL,
+  process.env.SUPABASE_SERVICE_ROLE_KEY,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false
+    }
+  }
 )
 
 export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+  const page = parseInt(searchParams.get('page') || '1')
+  const limit = parseInt(searchParams.get('limit') || '10')
+  const status = searchParams.get('status')
+  const search = searchParams.get('search')
+  const email = searchParams.get('email')
+
   try {
-    const { searchParams } = new URL(request.url)
-    const page = parseInt(searchParams.get('page') || '1')
-    const per_page = parseInt(searchParams.get('per_page') || '25')
-    const status = searchParams.get('status') // 'premium', 'normal', or null for all
-    const search = searchParams.get('search')?.toLowerCase() // Novo parâmetro de busca
-
-    // Buscar todos os usuários paginando até obter todos
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let allUsers: any[] = []
-    let currentPage = 0
-    let hasMore = true
-
-    while (hasMore) {
-      const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers({
-        page: currentPage,
-        perPage: 1000 // Máximo permitido pelo Supabase
-      })
+    if (email) {
+      // Busca direta por email usando o cliente supabase (o mesmo usado no POST)
+      const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers()
       
       if (getUserError) {
-        return NextResponse.json({ error: getUserError.message }, { status: 500 })
+        console.error('Erro ao listar usuários:', getUserError)
+        return NextResponse.json({ error: 'Erro ao verificar usuário' }, { status: 500 })
       }
 
-      if (!users || users.length === 0) {
-        hasMore = false
-      } else {
-        allUsers = [...allUsers, ...users]
-        currentPage++
-      }
-    }
-
-    if (allUsers.length === 0) {
-      return NextResponse.json({ users: [], total: 0 })
-    }
-
-    // Buscar todos os perfis
-    const { data: profiles, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-
-    if (profileError) {
-      return NextResponse.json({ error: profileError.message }, { status: 500 })
-    }
-
-    // Aplicar busca se houver termo de pesquisa
-    let filteredUsers = allUsers
-    if (search) {
-      filteredUsers = allUsers.filter(user => {
-        const userProfile = profiles?.find(profile => profile.id === user.id)
-        const searchableFields = [
-          user.email?.toLowerCase(),
-          userProfile?.name?.toLowerCase(),
-          userProfile?.external_id?.toLowerCase(),
-          userProfile?.phone_number
-        ]
-        return searchableFields.some(field => field?.includes(search))
-      })
-    }
-
-    // Filtrar usuários com base no status
-    if (status) {
-      filteredUsers = filteredUsers.filter(user => {
-        const userProfile = profiles?.find(profile => profile.id === user.id)
-        if (status === 'premium') {
-          return userProfile?.is_premium === true
-        } else if (status === 'normal') {
-          return userProfile?.is_premium === false || !userProfile
-        }
-        return true
-      })
-    }
-
-    // Aplicar paginação manualmente
-    const totalUsers = filteredUsers.length
-    const start = (page - 1) * per_page
-    const end = start + per_page
-    const paginatedUsers = filteredUsers.slice(start, end)
-
-    // Obter IDs dos usuários paginados
-    const userIds = paginatedUsers.map(user => user.id)
-    
-    // Buscar perfis específicos para os usuários paginados
-    // Isso garante que encontraremos os perfis mesmo que estejam além dos primeiros 1000
-    const { data: specificProfiles, error: specificProfileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .in('id', userIds)
-    
-    if (specificProfileError) {
-      console.error('Erro ao buscar perfis específicos:', specificProfileError)
-    }
-    
-    // Combinar usuários paginados com seus perfis
-    // Primeiro tentamos encontrar no conjunto específico de perfis
-    // Se não encontrarmos, tentamos no conjunto geral de perfis
-    const usersWithProfiles = paginatedUsers.map(user => {
-      const specificProfile = specificProfiles?.find(profile => profile.id === user.id)
-      const generalProfile = profiles?.find(profile => profile.id === user.id)
+      const authUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
       
-      return {
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at,
-        profile: specificProfile || generalProfile
+      if (!authUser) {
+        return NextResponse.json({ users: [] })
       }
-    })
 
-    return NextResponse.json({ 
-      users: usersWithProfiles,
-      total: totalUsers
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .single()
+
+      if (profileError && profileError.code !== 'PGRST116') {
+        console.error('Erro ao buscar perfil:', profileError)
+        return NextResponse.json({ error: 'Erro ao buscar perfil' }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        users: [{
+          id: authUser.id,
+          email: authUser.email,
+          profile: profile || null
+        }]
+      })
+    }
+
+    // Para listagem de usuários
+    let query = supabase
+      .from('profiles')
+      .select('id, name, email, is_premium, expiration_date, phone_number, phone_local_code, external_id, created_at', { count: 'exact' })
+
+    if (status) {
+      query = query.eq('is_premium', status === 'premium')
+    }
+
+    if (search) {
+      // Filter only on columns that exist in profiles to avoid errors.
+      // If email search is required, we can extend to filter via auth_users on a follow-up change.
+      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
+    }
+
+    const { data, error, count } = await query
+      .order('created_at', { ascending: false })
+      .range((page - 1) * limit, page * limit - 1)
+
+    if (error) {
+      console.error('Erro ao buscar usuários:', error)
+      return NextResponse.json({ error: 'Erro ao buscar usuários' }, { status: 500 })
+    }
+
+    // Transformar os resultados para o formato esperado
+    const users = data.map((profile: any) => ({
+      id: profile.id,
+      email: profile.email ?? null,
+      profile: {
+        name: profile.name,
+        is_premium: profile.is_premium,
+        expiration_date: profile.expiration_date,
+        phone_number: profile.phone_number,
+        phone_local_code: profile.phone_local_code,
+        external_id: profile.external_id
+      }
+    }))
+
+    return NextResponse.json({
+      users,
+      total: count || 0,
+      page,
+      totalPages: Math.ceil((count || 0) / limit)
     })
-  } catch (error: unknown) {
-    console.error('Erro na API:', error)
-    const apiError = error as ApiError
-    return NextResponse.json(
-      { error: apiError.message || 'Erro interno do servidor' }, 
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error('Erro ao processar requisição:', error)
+    return NextResponse.json({ error: 'Erro ao processar requisição' }, { status: 500 })
   }
 }
 
 export async function POST(request: Request) {
+  let body: any;
   try {
-    const body = await request.json()
+    body = await request.json()
     const { name, email, is_premium, expiration_date, phone_number, phone_local_code, external_id } = body
 
-    // Primeiro, verificar se o usuário existe
-    const { data: { users }, error: getUserError } = await supabase.auth.admin.listUsers()
-    
-    if (getUserError) {
-      return NextResponse.json({ error: getUserError.message }, { status: 500 })
-    }
-
-    const existingUser = users?.find(u => u.email?.toLowerCase() === email.toLowerCase())
     let userId: string
 
-    if (existingUser) {
-      userId = existingUser.id
-    } else {
-      // Criar novo usuário
-      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-        email: email,
+    try {
+      // Tentar criar o usuário primeiro
+      console.log('Tentando criar usuário:', email)
+      const { data: authData, error: createError } = await supabase.auth.admin.createUser({
+        email,
         email_confirm: true,
-        password: uuidv4(),
-        user_metadata: {
-          name: name
-        }
+        user_metadata: { name }
       })
 
       if (createError) {
-        return NextResponse.json({ error: createError.message }, { status: 400 })
-      }
+        if (createError.message?.includes('already been registered')) {
+          // Se o usuário já existe, buscar na lista completa
+          console.log('Usuário já existe, buscando na lista:', email)
+          
+          try {
+            // Tentar buscar o usuário diretamente pelo email - note que isso pode falhar
+            // se o email estiver em um case diferente, por isso é apenas uma otimização
+            const { data: { users }, error: listError } = await supabase.auth.admin.listUsers()
+            if (listError) throw listError
 
-      if (!newUser?.user) {
-        return NextResponse.json({ error: 'Erro ao criar usuário' }, { status: 500 })
-      }
-
-      userId = newUser.user.id
-    }
-
-    // Verificar se o perfil existe
-    const { data: existingProfile } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userId)
-      .single()
-
-    let profileData
-
-    if (!existingProfile) {
-      // Criar novo perfil
-      const { data: insertData, error: insertError } = await supabase
-        .from('profiles')
-        .insert([
-          {
-            id: userId,
-            name: name,
-            is_premium: is_premium,
-            expiration_date: expiration_date,
-            phone_number: phone_number,
-            phone_local_code: phone_local_code,
-            external_id: external_id,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            email: email
+            const existingUser = users.find(u => u.email?.toLowerCase() === email.toLowerCase())
+            
+            if (existingUser) {
+              // Encontrou o usuário, usar o ID
+              userId = existingUser.id
+              console.log('ID do usuário encontrado:', userId)
+            } else {
+              // Usuário existe mas não foi encontrado na lista
+              // Vamos gerar um perfil mesmo assim, já que sabemos que o email existe
+              console.log('Usuário existe mas não foi encontrado na lista. Gerando perfil direto.')
+              
+              // Verificar se já existe um perfil com esse email
+              const { data: profileByEmail } = await supabase
+                .from('profiles')
+                .select('id')
+                .eq('email', email)
+                .single()
+                
+              if (profileByEmail) {
+                // Já existe um perfil com esse email, usar o ID dele
+                userId = profileByEmail.id
+                console.log('Encontrado perfil com o email:', email, 'ID:', userId)
+              } else {
+                // Criar um novo perfil com um UUID
+                userId = uuidv4()
+                console.log('Gerando UUID para novo perfil:', userId)
+              }
+            }
+          } catch (err) {
+            // Falha na busca, ainda vamos criar um perfil
+            console.error('Erro ao buscar usuário:', err)
+            userId = uuidv4()
+            console.log('Erro na busca. Gerando UUID para novo perfil:', userId)
           }
-        ])
-        .select()
-        .single()
-
-      if (insertError) {
-        return NextResponse.json({ error: insertError.message }, { status: 400 })
+        } else {
+          throw createError
+        }
+      } else {
+        userId = authData.user.id
+        console.log('Novo usuário criado:', userId)
       }
 
-      profileData = insertData
-    } else {
-      // Atualizar perfil existente
-      const { data: updateData, error: updateError } = await supabase
+      // Verificar se existe perfil com este ID
+      const { data: existingProfile } = await supabase
         .from('profiles')
-        .update({
-          name: name,
-          is_premium: is_premium,
-          expiration_date: expiration_date,
-          phone_number: phone_number,
-          phone_local_code: phone_local_code,
-          external_id: external_id,
-          updated_at: new Date().toISOString(),
-          email: email
-        })
+        .select('*')
         .eq('id', userId)
-        .select()
         .single()
 
-      if (updateError) {
-        return NextResponse.json({ error: updateError.message }, { status: 400 })
+      if (existingProfile) {
+        // Atualizar perfil existente
+        console.log('Atualizando perfil existente:', email)
+        const { data: updateData, error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            name,
+            is_premium,
+            expiration_date,
+            phone_number,
+            phone_local_code,
+            external_id,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId)
+          .select()
+          .single()
+
+        if (updateError) {
+          console.error('Erro ao atualizar perfil:', updateError)
+          throw updateError
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: updateData,
+          action: 'updated',
+          email
+        })
+      } else {
+        // Criar novo perfil
+        console.log('Criando novo perfil:', email)
+        const { data: insertData, error: insertError } = await supabase
+          .from('profiles')
+          .insert([{
+            id: userId,
+            name,
+            email,
+            is_premium,
+            expiration_date,
+            phone_number,
+            phone_local_code,
+            external_id,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }])
+          .select()
+          .single()
+
+        if (insertError) {
+          console.error('Erro ao criar perfil:', insertError)
+          throw insertError
+        }
+
+        return NextResponse.json({
+          success: true,
+          data: insertData,
+          action: 'created',
+          email
+        })
       }
-
-      profileData = updateData
+    } catch (error) {
+      console.error('Erro ao processar autenticação:', error)
+      throw error
     }
-
-    return NextResponse.json({ data: profileData })
-  } catch (error: unknown) {
-    console.error('Erro na API:', error)
-    const apiError = error as ApiError
-    return NextResponse.json(
-      { error: apiError.message || 'Erro interno do servidor' }, 
-      { status: 500 }
-    )
+  } catch (error) {
+    console.error('Erro ao processar usuário:', error)
+    return NextResponse.json({ 
+      error: 'Erro ao processar usuário',
+      details: error instanceof Error ? error.message : 'Erro desconhecido',
+      email: body?.email 
+    }, { status: 400 })
   }
 } 
