@@ -9,23 +9,11 @@ const supabase = createClient(
 // PUT: Atualiza ou cria o perfil do usuário
 export async function PUT(
   request: Request,
-  { params }: { params: { id: string } }
+  context: unknown
 ) {
   try {
-    const { id } = params
+    const { id } = (context as { params: { id: string } }).params
     const body = await request.json()
-
-    // Verificar se o perfil existe
-    const { data: existingProfile, error: profileError } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', id)
-      .single()
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      console.error('Erro ao buscar perfil:', profileError)
-      return NextResponse.json({ error: 'Erro ao buscar perfil' }, { status: 500 })
-    }
 
     // Atualizar ou criar o perfil
     const { data: profile, error: upsertError } = await supabase

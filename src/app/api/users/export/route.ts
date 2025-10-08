@@ -1,6 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+interface ExportRow {
+  id: string
+  name: string | null
+  email: string | null
+  is_premium: boolean
+  expiration_date: string | null
+  phone_number: string | null
+  phone_local_code: string | null
+  external_id: string | null
+  created_at: string | null
+}
+
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
   throw new Error('SUPABASE_SERVICE_ROLE_KEY is required')
 }
@@ -43,7 +55,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'Erro ao exportar usuários' }, { status: 500 })
     }
 
-    const rows = (data as any[]) || []
+    const rows: ExportRow[] = (data as ExportRow[]) || []
 
     // CSV Header
     const header = [
@@ -59,7 +71,7 @@ export async function GET(request: Request) {
     ]
 
     // Escape CSV field
-    const escapeCsv = (value: any) => {
+    const escapeCsv = (value: unknown) => {
       if (value === null || value === undefined) return ''
       const s = String(value)
       if (/[",\n]/.test(s)) {
@@ -70,7 +82,7 @@ export async function GET(request: Request) {
 
     const csvLines = [
       header.join(','),
-      ...rows.map((r: any) =>
+      ...rows.map((r: ExportRow) =>
         [
           r.id,
           r.name ?? '',

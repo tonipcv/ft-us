@@ -1,14 +1,7 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import Link from 'next/link'
-
-interface Student {
-  name: string
-  email: string
-  phone: string
-  enrollment_date: string
-}
 
 interface ProcessingDetail {
   email: string
@@ -48,15 +41,6 @@ export default function BulkPremiumPage() {
     phone: '',
     enrollment_date: ''
   })
-  
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  const isAllMapped = Boolean(
-    columnMapping.name && 
-    columnMapping.email && 
-    columnMapping.phone && 
-    columnMapping.enrollment_date
-  )
   
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

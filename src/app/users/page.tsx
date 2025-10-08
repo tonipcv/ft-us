@@ -151,6 +151,26 @@ export default function UsersPage() {
     }
   }, [pagination.page, pagination.per_page, statusFilter, searchTerm])
 
+  const handleExport = async (type: 'all' | 'premium') => {
+    try {
+      const res = await fetch(`/api/users/export?type=${type}`)
+      if (!res.ok) {
+        throw new Error('Falha ao gerar CSV')
+      }
+      const blob = await res.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `usuarios-${type}.csv`
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch (err) {
+      setStatus({ text: 'Erro ao exportar CSV', details: err instanceof Error ? err.message : undefined, type: 'error' })
+    }
+  }
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchUsers()
@@ -306,18 +326,18 @@ export default function UsersPage() {
             >
               Converter em Massa
             </Link>
-            <a
-              href="/api/users/export?type=premium"
+            <button
+              onClick={() => handleExport('premium')}
               className="px-4 py-2 bg-emerald-600/10 text-emerald-200 rounded-md hover:bg-emerald-600/20 transition-all duration-200"
             >
               Exportar Premium CSV
-            </a>
-            <a
-              href="/api/users/export?type=all"
+            </button>
+            <button
+              onClick={() => handleExport('all')}
               className="px-4 py-2 bg-white/10 text-white rounded-md hover:bg-white/20 transition-all duration-200"
             >
               Exportar Geral CSV
-            </a>
+            </button>
           </div>
         </div>
 

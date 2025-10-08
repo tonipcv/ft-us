@@ -1,13 +1,17 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { v4 as uuidv4 } from 'uuid'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
-interface ApiError {
-  message: string;
-  code?: string;
-  details?: string;
+interface ProfileRow {
+  id: string
+  name: string | null
+  email: string | null
+  is_premium: boolean
+  expiration_date: string | null
+  phone_number: string | null
+  phone_local_code: string | null
+  external_id: string | null
+  created_at: string | null
 }
 
 if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -99,7 +103,7 @@ export async function GET(request: Request) {
     }
 
     // Transformar os resultados para o formato esperado
-    const users = data.map((profile: any) => ({
+    const users = (data as ProfileRow[]).map((profile: ProfileRow) => ({
       id: profile.id,
       email: profile.email ?? null,
       profile: {
@@ -124,10 +128,20 @@ export async function GET(request: Request) {
   }
 }
 
+interface PostBody {
+  name?: string
+  email: string
+  is_premium?: boolean
+  expiration_date?: string
+  phone_number?: string
+  phone_local_code?: string
+  external_id?: string
+}
+
 export async function POST(request: Request) {
-  let body: any;
+  let body: PostBody | null = null;
   try {
-    body = await request.json()
+    body = (await request.json()) as PostBody
     const { name, email, is_premium, expiration_date, phone_number, phone_local_code, external_id } = body
 
     let userId: string
