@@ -88,9 +88,8 @@ export async function GET(request: Request) {
     }
 
     if (search) {
-      // Filter only on columns that exist in profiles to avoid errors.
-      // If email search is required, we can extend to filter via auth_users on a follow-up change.
-      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%`)
+      // Filter on columns that exist in profiles, including email so searches by email work
+      query = query.or(`name.ilike.%${search}%,phone_number.ilike.%${search}%,email.ilike.%${search}%`)
     }
 
     const { data, error, count } = await query
@@ -227,6 +226,8 @@ export async function POST(request: Request) {
             phone_number,
             phone_local_code,
             external_id,
+            // Ensure the email is saved in the profile so it appears in listings/search
+            email,
             updated_at: new Date().toISOString()
           })
           .eq('id', userId)

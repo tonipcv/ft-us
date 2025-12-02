@@ -111,6 +111,15 @@ export default function UsersPage() {
     per_page: 25
   })
 
+  useEffect(() => {
+    try {
+      const flag = typeof window !== 'undefined' ? localStorage.getItem('users_access') : null
+      if (flag === '1') {
+        setIsAuthenticated(true)
+      }
+    } catch {}
+  }, [])
+
   const fetchUsers = useCallback(async () => {
     try {
       const queryParams = new URLSearchParams({
@@ -271,7 +280,7 @@ export default function UsersPage() {
   }
 
   if (!isAuthenticated) {
-    return <ProtectionScreen onAccess={() => setIsAuthenticated(true)} />
+    return <ProtectionScreen onAccess={() => { try { localStorage.setItem('users_access', '1') } catch {} setIsAuthenticated(true) }} />
   }
 
   return (
